@@ -2,10 +2,11 @@ package remarkableadaptor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -86,11 +87,13 @@ type ReFolders []ReFolder
 type ReFiles []ReFile
 
 type ReMarkable struct {
-	host      string
-	Documents ReDocuments
-	Folders   []ReFolder
-	Files     []ReFile
-	path      string
+	host          string
+	Documents     ReDocuments
+	Folders       []ReFolder
+	FoldersCache  map[string]ReFolder
+	Files         []ReFile
+	currentFolder *ReFolder
+	path          string
 }
 
 func (tablet *ReMarkable) setHost(providedHost string) {
@@ -101,51 +104,124 @@ func (folder ReDocument) String() string {
 	return fmt.Sprintf("name: %s", folder.VissibleName)
 }
 
+func (tablet *ReMarkable) MoveToRoot() {
+	tablet.currentFolder = nil
+	tablet.path = ""
+}
+
+func (tablet *ReMarkable) MoveFolder(folder *ReFolder) error {
+	if folder == nil {
+		return errors.New("folder is nil")
+	}
+	tablet.currentFolder = folder
+	tablet.path = tablet.currentFolder.ID
+	if _, err := tablet.FetchDocuments(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tablet *ReMarkable) MoveParent() error {
+	if tablet.currentFolder == nil {
+		return errors.New("no parent folder")
+	}
+
+	if tablet.currentFolder.Parent == "" {
+		return errors.New("no parent folder")
+	}
+
+	if tablet.currentFolder == nil {
+		return errors.New("no current folder")
+	}
+
+	cacheIndex := tablet.currentFolder.Parent
+	cache := tablet.FoldersCache[cacheIndex]
+	if err := tablet.MoveFolder(&cache); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (tablet *ReMarkable) GetCurrentFolder() ReFolder {
+	return *tablet.currentFolder
+}
+
+func (tablet *ReMarkable) resetDocuments() {
+	tablet.Documents = ReDocuments{}
+	tablet.Folders = ReFolders{}
+	tablet.Files = ReFiles{}
+}
+
+func (tablet *ReMarkable) appendToCache(folder ReFolder) {
+	tablet.FoldersCache[folder.ID] = folder
+}
+
+func (tablet *ReMarkable) request() ([]byte, error) {
+	resp, err := http.Post(tablet.host+"/documents/"+tablet.path, "text/plain", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Decode the folders
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
 func (tablet *ReMarkable) FetchDocuments() (*ReDocuments, error) {
 	// Fill the ReMarkable struct with the data from the API
-	resp, err := http.Post(tablet.host+"/documents/", "text/plain", nil)
+	b, err := tablet.request()
 	if err != nil {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	tablet.resetDocuments()
 
 	var tmpFiles []ReFile
 	var tmpFolders []ReFolder
-
-	// // Decode the data
-	// if err := json.NewDecoder(resp.Body).Decode(&tablet.Documents); err != nil {
-	// 	return nil, err
-	// }
-	// Decode the folders
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
 
 	json.Unmarshal(b, &tablet.Documents)
 	json.Unmarshal(b, &tmpFiles)
 	json.Unmarshal(b, &tmpFolders)
 
-	tablet.Folders = ReFolders{}
-
 	for i, v := range tablet.Documents {
 		if v.Type == "CollectionType" {
+			tablet.appendToCache(tmpFolders[i])
 			tablet.Folders = append(tablet.Folders, tmpFolders[i])
 		} else if v.Type == "DocumentType" {
 			tablet.Files = append(tablet.Files, tmpFiles[i])
 		}
 	}
 
-	fmt.Println(tablet.Folders)
-	fmt.Println(tablet.Files)
-
 	return &tablet.Documents, nil
+}
+
+func (tablet *ReMarkable) printTree(tab int, append string) string {
+	tablet.FetchDocuments()
+	for _, file := range tablet.Files {
+		append += fmt.Sprintf("%s├─ 🗒️  %s\n", strings.Repeat("|  ", tab), file.VissibleName)
+	}
+	for _, folder := range tablet.Folders {
+		append += fmt.Sprintf("%s├─ 📂 %s/\n", strings.Repeat("|  ", tab), folder.VissibleName)
+		tablet.MoveFolder(&folder)
+		append = tablet.printTree(tab+1, append)
+	}
+	tablet.MoveParent()
+	return append
+}
+
+func (tablet *ReMarkable) PrintTree() string {
+	return tablet.printTree(0, "Root:\n")
 }
 
 func (tablet *ReMarkable) Load(providedHost string) (*ReMarkable, error) {
 	tablet.setHost(providedHost)
-	tablet.path = "/"
+	tablet.path = ""
+	tablet.FoldersCache = make(map[string]ReFolder)
 
 	if _, err := tablet.FetchDocuments(); err != nil {
 		return nil, err
