@@ -3,6 +3,8 @@ package remarkableadaptor
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 )
@@ -80,6 +82,8 @@ type ReDocument struct {
 }
 
 type ReDocuments []ReDocument
+type ReFolders []ReFolder
+type ReFiles []ReFile
 
 type ReMarkable struct {
 	host      string
@@ -93,6 +97,10 @@ func (tablet *ReMarkable) setHost(providedHost string) {
 	tablet.host = fmt.Sprintf("http://%s", providedHost)
 }
 
+func (folder ReDocument) String() string {
+	return fmt.Sprintf("name: %s", folder.VissibleName)
+}
+
 func (tablet *ReMarkable) FetchDocuments() (*ReDocuments, error) {
 	// Fill the ReMarkable struct with the data from the API
 	resp, err := http.Post(tablet.host+"/documents/", "text/plain", nil)
@@ -102,10 +110,35 @@ func (tablet *ReMarkable) FetchDocuments() (*ReDocuments, error) {
 
 	defer resp.Body.Close()
 
-	// Decode the data
-	if err := json.NewDecoder(resp.Body).Decode(&tablet.Documents); err != nil {
-		return nil, err
+	var tmpFiles []ReFile
+	var tmpFolders []ReFolder
+
+	// // Decode the data
+	// if err := json.NewDecoder(resp.Body).Decode(&tablet.Documents); err != nil {
+	// 	return nil, err
+	// }
+	// Decode the folders
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
 	}
+
+	json.Unmarshal(b, &tablet.Documents)
+	json.Unmarshal(b, &tmpFiles)
+	json.Unmarshal(b, &tmpFolders)
+
+	tablet.Folders = ReFolders{}
+
+	for i, v := range tablet.Documents {
+		if v.Type == "CollectionType" {
+			tablet.Folders = append(tablet.Folders, tmpFolders[i])
+		} else if v.Type == "DocumentType" {
+			tablet.Files = append(tablet.Files, tmpFiles[i])
+		}
+	}
+
+	fmt.Println(tablet.Folders)
+	fmt.Println(tablet.Files)
 
 	return &tablet.Documents, nil
 }
