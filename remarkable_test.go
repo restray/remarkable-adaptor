@@ -208,32 +208,32 @@ func (suite *WorkingRemarkableTestSuite) TestDownloadChildrenFile() {
 	suite.FileExists(path.Join(suite.tmpFolder, "children_file.pdf"))
 }
 
-func TestUploadFile(t *testing.T) {
-	tablet := new(ReMarkable)
-	tablet, err := tablet.Load("10.11.99.1")
+// func TestUploadFile(t *testing.T) {
+// 	tablet := new(ReMarkable)
+// 	tablet, err := tablet.Load("localhost:8080")
 
-	assert.NoError(t, err)
-	assert.NotNil(t, tablet)
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, tablet)
 
-	currDir, err := os.Getwd()
-	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
-	assert.NoError(t, err)
-}
+// 	currDir, err := os.Getwd()
+// 	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
+// 	assert.NoError(t, err)
+// }
 
-func TestUploadFileInFolder(t *testing.T) {
-	tablet := new(ReMarkable)
-	tablet, err := tablet.Load("10.11.99.1")
+// func TestUploadFileInFolder(t *testing.T) {
+// 	tablet := new(ReMarkable)
+// 	tablet, err := tablet.Load("localhost:8080")
 
-	assert.NoError(t, err)
-	assert.NotNil(t, tablet)
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, tablet)
 
-	testFolder := tablet.Folders[0]
-	tablet.MoveFolder(&testFolder)
+// 	testFolder := tablet.Folders[0]
+// 	tablet.MoveFolder(&testFolder)
 
-	currDir, err := os.Getwd()
-	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
-	assert.NoError(t, err)
-}
+// 	currDir, err := os.Getwd()
+// 	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
+// 	assert.NoError(t, err)
+// }
 
 func TestWorkingRemarkableTestSuite(t *testing.T) {
 	testSuite := new(WorkingRemarkableTestSuite)
