@@ -151,6 +151,13 @@ func (tablet *ReMarkable) GetCurrentFolder() ReFolder {
 	return *tablet.currentFolder
 }
 
+func (tablet *ReMarkable) GetCurrentFolderName() string {
+	if tablet.currentFolder == nil {
+		return "Root"
+	}
+	return tablet.currentFolder.VissibleName
+}
+
 func (tablet *ReMarkable) resetDocuments() {
 	tablet.Documents = ReDocuments{}
 	tablet.Folders = ReFolders{}
@@ -204,21 +211,21 @@ func (tablet *ReMarkable) FetchDocuments() (*ReDocuments, error) {
 	return &tablet.Documents, nil
 }
 
-func (tablet *ReMarkable) printTree(tab int, append string) string {
+func (tablet *ReMarkable) getTree(tab int, append string) string {
 	for _, file := range tablet.Files {
 		append += fmt.Sprintf("%s├─ 🗒️  %s\n", strings.Repeat("|  ", tab), file.VissibleName)
 	}
 	for _, folder := range tablet.Folders {
 		append += fmt.Sprintf("%s├─ 📂 %s/\n", strings.Repeat("|  ", tab), folder.VissibleName)
 		tablet.MoveFolder(&folder)
-		append = tablet.printTree(tab+1, append)
+		append = tablet.getTree(tab+1, append)
+		tablet.MoveParent()
 	}
-	tablet.MoveParent()
 	return append
 }
 
-func (tablet *ReMarkable) PrintTree() string {
-	return tablet.printTree(0, "Root:\n")
+func (tablet *ReMarkable) GetTree() string {
+	return tablet.getTree(0, "📂 "+tablet.GetCurrentFolderName()+":\n")
 }
 
 func (tablet *ReMarkable) Load(providedHost string) (*ReMarkable, error) {

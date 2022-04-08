@@ -108,9 +108,25 @@ func (suite *WorkingRemarkableTestSuite) TestTree() {
 	suite.NoError(err)
 	suite.NotNil(tablet)
 
-	result := tablet.PrintTree()
+	result := tablet.GetTree()
 	suite.requests += 2 * 2 // Root is already loaded from "Load", and 2 folders are loaded from "FetchDocuments" and then "MoveParent"
-	suite.Equal(result, "Root:\n├─ 🗒️  Agenda\n├─ 📂 Test/\n|  ├─ 🗒️  Children File\n├─ 📂 GoLang/\n|  ├─ 🗒️  Golang File\n")
+	suite.Equal(result, "📂 Root:\n├─ 🗒️  Agenda\n├─ 📂 Test/\n|  ├─ 🗒️  Children File\n├─ 📂 GoLang/\n|  ├─ 🗒️  Golang File\n")
+}
+
+func (suite *WorkingRemarkableTestSuite) TestChildrenTree() {
+	tablet := new(ReMarkable)
+	tablet, err := tablet.Load("localhost:8080")
+	suite.requests++
+
+	suite.NoError(err)
+	suite.NotNil(tablet)
+
+	testFolder := tablet.Folders[0]
+	tablet.MoveFolder(&testFolder)
+	suite.requests++
+
+	result := tablet.GetTree()
+	suite.Equal(result, "📂 Test:\n├─ 🗒️  Children File\n")
 }
 
 // In order for 'go test' to run this suite, we need to create
@@ -122,23 +138,19 @@ func TestWorkingRemarkableTestSuite(t *testing.T) {
 	requestsDone := 0
 
 	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/", func(req *http.Request) (*http.Response, error) {
-		fmt.Println("[POST] Request documents root")
 		requestsDone++
 		return httpmock.NewStringResponse(200, getJsonFile("test_set.json")), nil
 	})
 	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/test", func(req *http.Request) (*http.Response, error) {
-		fmt.Println("[POST] Request test/ documents")
 		requestsDone++
 		return httpmock.NewStringResponse(200, getJsonFile("test_children_test.json")), nil
 	})
 	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/golang", func(req *http.Request) (*http.Response, error) {
-		fmt.Println("[POST] Request golang/ documents")
 		requestsDone++
 		return httpmock.NewStringResponse(200, getJsonFile("test_children_golang.json")), nil
 	})
 
 	testSuite := new(WorkingRemarkableTestSuite)
 	suite.Run(t, testSuite)
-	fmt.Println(testSuite.requests, requestsDone)
 	assert.Equal(t, requestsDone, testSuite.requests)
 }
