@@ -3,8 +3,10 @@ package remarkableadaptor
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/jarcoal/httpmock"
@@ -17,12 +19,14 @@ import (
 // returns the current testing context
 type WorkingRemarkableTestSuite struct {
 	suite.Suite
-	requests int
+	requests     int
+	requestsDone int
+	tmpFolder    string
 }
 
 func getJsonFile(filename string) string {
 	// Open our jsonFile
-	jsonFile, err := os.Open(filename)
+	jsonFile, err := os.Open("test_files/" + filename)
 	// if we os.Open returns an error then handle it
 	if err != nil {
 		fmt.Println(err)
@@ -35,8 +39,51 @@ func getJsonFile(filename string) string {
 	return string(respSrv)
 }
 
-func (suite *WorkingRemarkableTestSuite) SetupAllSuite() {
+func (suite *WorkingRemarkableTestSuite) SetupSuite() {
 	suite.requests = 0
+	suite.requestsDone = 0
+
+	currDir, err := os.Getwd()
+	if err != nil {
+		log.Panicln("Can't get working dir")
+	}
+	dir, err := ioutil.TempDir(currDir, "test_tmp")
+	if err != nil {
+		log.Panicln("Can't create temp dir")
+	}
+
+	httpmock.Activate()
+
+	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/", func(req *http.Request) (*http.Response, error) {
+		suite.requestsDone++
+		return httpmock.NewStringResponse(200, getJsonFile("test_set.json")), nil
+	})
+	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/test", func(req *http.Request) (*http.Response, error) {
+		suite.requestsDone++
+		return httpmock.NewStringResponse(200, getJsonFile("test_children_test.json")), nil
+	})
+	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/golang", func(req *http.Request) (*http.Response, error) {
+		suite.requestsDone++
+		return httpmock.NewStringResponse(200, getJsonFile("test_children_golang.json")), nil
+	})
+	httpmock.RegisterResponder("GET", "http://localhost:8080/download/children_file/placeholder", func(req *http.Request) (*http.Response, error) {
+		suite.requestsDone++
+		return httpmock.NewBytesResponse(200, httpmock.File("test_files/children_file.pdf").Bytes()), nil
+	})
+	httpmock.RegisterResponder("GET", "http://localhost:8080/download/rootfile/placeholder", func(req *http.Request) (*http.Response, error) {
+		suite.requestsDone++
+		return httpmock.NewBytesResponse(200, httpmock.File("test_files/rootfile.pdf").Bytes()), nil
+	})
+
+	suite.tmpFolder = dir
+}
+
+func (suite *WorkingRemarkableTestSuite) TearDownSuite() {
+	httpmock.DeactivateAndReset()
+	err := os.RemoveAll(suite.tmpFolder)
+	if err != nil {
+		log.Panicln(suite.tmpFolder, err)
+	}
 }
 
 func (suite *WorkingRemarkableTestSuite) TestLoad() {
@@ -110,7 +157,7 @@ func (suite *WorkingRemarkableTestSuite) TestTree() {
 
 	result := tablet.GetTree()
 	suite.requests += 2 * 2 // Root is already loaded from "Load", and 2 folders are loaded from "FetchDocuments" and then "MoveParent"
-	suite.Equal(result, "📂 Root:\n├─ 🗒️  Agenda\n├─ 📂 Test/\n|  ├─ 🗒️  Children File\n├─ 📂 GoLang/\n|  ├─ 🗒️  Golang File\n")
+	suite.Equal(result, "📂 Root:\n├─ 🗒️  File On Root\n├─ 📂 Test/\n|  ├─ 🗒️  Children File\n├─ 📂 GoLang/\n|  ├─ 🗒️  Golang File\n")
 }
 
 func (suite *WorkingRemarkableTestSuite) TestChildrenTree() {
@@ -129,28 +176,42 @@ func (suite *WorkingRemarkableTestSuite) TestChildrenTree() {
 	suite.Equal(result, "📂 Test:\n├─ 🗒️  Children File\n")
 }
 
+func (suite *WorkingRemarkableTestSuite) TestDownloadFile() {
+	tablet := new(ReMarkable)
+	tablet, err := tablet.Load("localhost:8080")
+	suite.requests++
+
+	suite.NoError(err)
+	suite.NotNil(tablet)
+
+	err = tablet.Download(&tablet.Files[0], path.Join(suite.tmpFolder, "test.pdf"))
+	suite.requests++
+	suite.NoError(err)
+	suite.FileExists(path.Join(suite.tmpFolder, "test.pdf"))
+}
+
+func (suite *WorkingRemarkableTestSuite) TestDownloadChildrenFile() {
+	tablet := new(ReMarkable)
+	tablet, err := tablet.Load("localhost:8080")
+	suite.requests++
+
+	suite.NoError(err)
+	suite.NotNil(tablet)
+
+	testFolder := tablet.Folders[0]
+	tablet.MoveFolder(&testFolder)
+	suite.requests++
+
+	err = tablet.Download(&tablet.Files[0], path.Join(suite.tmpFolder, "children_file.pdf"))
+	suite.requests++
+	suite.NoError(err)
+	suite.FileExists(path.Join(suite.tmpFolder, "children_file.pdf"))
+}
+
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
 func TestWorkingRemarkableTestSuite(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	requestsDone := 0
-
-	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/", func(req *http.Request) (*http.Response, error) {
-		requestsDone++
-		return httpmock.NewStringResponse(200, getJsonFile("test_set.json")), nil
-	})
-	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/test", func(req *http.Request) (*http.Response, error) {
-		requestsDone++
-		return httpmock.NewStringResponse(200, getJsonFile("test_children_test.json")), nil
-	})
-	httpmock.RegisterResponder("POST", "http://localhost:8080/documents/golang", func(req *http.Request) (*http.Response, error) {
-		requestsDone++
-		return httpmock.NewStringResponse(200, getJsonFile("test_children_golang.json")), nil
-	})
-
 	testSuite := new(WorkingRemarkableTestSuite)
 	suite.Run(t, testSuite)
-	assert.Equal(t, requestsDone, testSuite.requests)
+	assert.Equal(t, testSuite.requestsDone, testSuite.requests)
 }

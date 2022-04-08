@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -101,7 +103,7 @@ func (tablet *ReMarkable) setHost(providedHost string) {
 }
 
 func (folder ReDocument) String() string {
-	return fmt.Sprintf("name: %s", folder.VissibleName)
+	return folder.VissibleName
 }
 
 func (tablet *ReMarkable) MoveToRoot() {
@@ -155,7 +157,7 @@ func (tablet *ReMarkable) GetCurrentFolderName() string {
 	if tablet.currentFolder == nil {
 		return "Root"
 	}
-	return tablet.currentFolder.VissibleName
+	return tablet.currentFolder.String()
 }
 
 func (tablet *ReMarkable) resetDocuments() {
@@ -175,7 +177,7 @@ func (tablet *ReMarkable) request() ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	// Decode the folders
+	// Decode the JSON to String
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -222,6 +224,30 @@ func (tablet *ReMarkable) getTree(tab int, append string) string {
 		tablet.MoveParent()
 	}
 	return append
+}
+
+func (tablet *ReMarkable) Download(file *ReFile, filepath string) error {
+	if file == nil {
+		return errors.New("file is nil")
+	}
+
+	resp, err := http.Get(tablet.host + "/download/" + file.ID + "/placeholder")
+
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func (tablet *ReMarkable) GetTree() string {
