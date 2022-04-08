@@ -127,7 +127,11 @@ func (tablet *ReMarkable) MoveParent() error {
 	}
 
 	if tablet.currentFolder.Parent == "" {
-		return errors.New("no parent folder")
+		tablet.MoveToRoot()
+		if _, err := tablet.FetchDocuments(); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if tablet.currentFolder == nil {
@@ -201,7 +205,6 @@ func (tablet *ReMarkable) FetchDocuments() (*ReDocuments, error) {
 }
 
 func (tablet *ReMarkable) printTree(tab int, append string) string {
-	tablet.FetchDocuments()
 	for _, file := range tablet.Files {
 		append += fmt.Sprintf("%s├─ 🗒️  %s\n", strings.Repeat("|  ", tab), file.VissibleName)
 	}
