@@ -1,4 +1,4 @@
-module github.com/restray/rermarkable-adaptor
+module github.com/restray/remarkable-adaptor
 
 go 1.18
 
