@@ -1,13 +1,16 @@
 package remarkableadaptor
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -20,7 +23,7 @@ type ReFile struct {
 
 	Margins            int    `json:"margins"`
 	Orientation        string `json:"orientation"`
-	RedirectionPageMap []int  `json:"redirectionPageMap"` /* Don't understand this.. */
+	RedirectionPageMap []int  `json:"redirectionPageMap"`
 	SizeInBytes        string `json:"sizeInBytes"`
 
 	FontName      string `json:"fontName"`
@@ -247,6 +250,32 @@ func (tablet *ReMarkable) Download(file *ReFile, filepath string) error {
 
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func (tablet *ReMarkable) Upload(filePath string, fileName string) error {
+	fileExt := path.Ext(filePath)
+	print(fileExt)
+	if fileExt != ".pdf" && fileExt != ".epub" {
+		return errors.New("filetype not supported")
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", fileName)
+	io.Copy(part, file)
+	writer.Close()
+
+	r, _ := http.NewRequest("POST", tablet.host+"/upload", body)
+	r.Header.Add("Content-Type", writer.FormDataContentType())
+	client := &http.Client{}
+	_, err = client.Do(r)
 	return err
 }
 

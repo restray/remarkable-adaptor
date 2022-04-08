@@ -208,8 +208,33 @@ func (suite *WorkingRemarkableTestSuite) TestDownloadChildrenFile() {
 	suite.FileExists(path.Join(suite.tmpFolder, "children_file.pdf"))
 }
 
-// In order for 'go test' to run this suite, we need to create
-// a normal test function and pass our suite to suite.Run
+func TestUploadFile(t *testing.T) {
+	tablet := new(ReMarkable)
+	tablet, err := tablet.Load("10.11.99.1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, tablet)
+
+	currDir, err := os.Getwd()
+	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
+	assert.NoError(t, err)
+}
+
+func TestUploadFileInFolder(t *testing.T) {
+	tablet := new(ReMarkable)
+	tablet, err := tablet.Load("10.11.99.1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, tablet)
+
+	testFolder := tablet.Folders[0]
+	tablet.MoveFolder(&testFolder)
+
+	currDir, err := os.Getwd()
+	err = tablet.Upload(path.Join(currDir, "test_files/test.pdf"), "test.pdf")
+	assert.NoError(t, err)
+}
+
 func TestWorkingRemarkableTestSuite(t *testing.T) {
 	testSuite := new(WorkingRemarkableTestSuite)
 	suite.Run(t, testSuite)
